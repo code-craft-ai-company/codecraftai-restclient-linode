@@ -249,6 +249,52 @@ class LinodeVolume(LinodeResource):
         return
 
 
+class LinodeDomain(LinodeResource):
+    """
+        A Linode DNS domain.
+    """
+
+    def record_create(self, *, record_type: str, name: str, target: str,
+                      ttl_sec: Optional[int] = None) -> "LinodeResource":
+        """
+            Create a record in this domain.
+
+            The API field is ``type``; the parameter is ``record_type``
+            because that is what callers already pass (``type`` is a Python
+            builtin and an awkward keyword).
+
+            :param record_type: The record type, e.g. ``A`` or ``CNAME``.
+            :param name: The record name.
+            :param target: The record target.
+            :param ttl_sec: Optional TTL in seconds.
+
+            :returns: The created record, bound to this domain's record
+                collection.
+        """
+        path = "{}/records".format(self.resource_path)
+        body: Dict[str, Any] = {"type": record_type, "name": name,
+                                "target": target}
+        if ttl_sec is not None:
+            body["ttl_sec"] = ttl_sec
+        payload = self._client.request(method="POST", path=path, body=body)
+        rtnval = make_resource(payload=payload.as_dict(),
+                               client=self._client, collection_path=path)
+        return rtnval
+
+    def records(self) -> Any:
+        """
+            List this domain's records.
+
+            :returns: The records, as active-record resources.
+        """
+        path = "{}/records".format(self.resource_path)
+        entries = self._client.paginate(path=path)
+        rtnval = [make_resource(payload=entry, client=self._client,
+                                collection_path=path)
+                  for entry in entries]
+        return rtnval
+
+
 def make_resource(*, payload: Dict[str, Any], client: Any,
                   collection_path: str,
                   resource_class: Optional[type] = None,

@@ -192,6 +192,87 @@ class LinodeRestClient:
         rtnval = LinodeObject({"data": wrapped})
         return rtnval
 
+    def volume_create(self, *, label: str, region: Optional[str] = None,
+                      size: Optional[int] = None,
+                      tags: Optional[List[str]] = None,
+                      linode: Optional[Any] = None,
+                      **fields: Any) -> Any:
+        """
+            Create a block-storage volume.
+
+            This lives on the client rather than the volumes group because
+            that is where callers reach for it.
+
+            :param label: The volume label.
+            :param region: The region id.
+            :param size: The size in GB.
+            :param tags: Optional tags.
+            :param linode: Optional instance to attach to — accepts an
+                instance RESOURCE (whose id is read) or a bare id, because
+                callers hold the object they just created.
+            :param fields: Remaining volume fields.
+
+            :returns: The created volume, as an active-record resource.
+        """
+        body: Dict[str, Any] = {"label": label}
+        if region is not None:
+            body["region"] = region
+        if size is not None:
+            body["size"] = size
+        if tags is not None:
+            body["tags"] = tags
+        if linode is not None:
+            linode_id = linode
+            if isinstance(linode, dict) is True:
+                linode_id = linode.get("id", None)
+            elif hasattr(linode, "id") is True:
+                linode_id = linode.id
+            if linode_id is not None:
+                body["linode_id"] = linode_id
+        for key, value in fields.items():
+            if value is not None:
+                body[key] = value
+
+        payload = self.request(method="POST", path="/volumes", body=body)
+
+        from ccai.restclient.linode.linoderesource import (
+            LinodeVolume, make_resource
+        )
+        rtnval = make_resource(payload=payload.as_dict(), client=self,
+                               collection_path="/volumes",
+                               resource_class=LinodeVolume)
+        return rtnval
+
+    def domain_create(self, *, domain: str, soa_email: str,
+                      domain_type: str = "master", **fields: Any) -> Any:
+        """
+            Create a DNS domain.
+
+            :param domain: The zone name.
+            :param soa_email: The SOA contact address, which the API
+                requires for a master zone.
+            :param domain_type: The zone type; ``master`` by default.
+            :param fields: Remaining domain fields.
+
+            :returns: The created domain, as an active-record resource
+                carrying ``record_create``.
+        """
+        body: Dict[str, Any] = {"domain": domain, "soa_email": soa_email,
+                                "type": domain_type}
+        for key, value in fields.items():
+            if value is not None:
+                body[key] = value
+
+        payload = self.request(method="POST", path="/domains", body=body)
+
+        from ccai.restclient.linode.linoderesource import (
+            LinodeDomain, make_resource
+        )
+        rtnval = make_resource(payload=payload.as_dict(), client=self,
+                               collection_path="/domains",
+                               resource_class=LinodeDomain)
+        return rtnval
+
     def _extract_error_reason(self, *, response: Any,
                               fallback: str) -> str:
         """

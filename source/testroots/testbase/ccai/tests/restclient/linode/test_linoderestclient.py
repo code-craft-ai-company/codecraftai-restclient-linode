@@ -398,3 +398,121 @@ def test_domains_group_lists_and_creates_records():
     assert record.id == 77
     assert session.calls[-1]["body"]["type"] == "A"
     return
+
+
+def test_client_level_volume_create_accepts_an_instance_handle():
+    """
+        volume_create's linode= takes the instance OBJECT callers already
+        hold, and sends its id as linode_id.
+    """
+    session = FakeSession()
+    session.queue_page(path="/linode/instances", entries=[{"id": 55}])
+    session.queue(method="POST", path="/volumes",
+                  response=FakeResponse(payload={"id": 90}))
+    client = _client(session=session)
+
+    instance = client.linode.instances()[0]
+    created = client.volume_create(label="data", region="us-east", size=20,
+                                   tags=["owner:ccai"], linode=instance)
+
+    body = session.calls[-1]["body"]
+    assert body["linode_id"] == 55
+    assert body["size"] == 20
+    assert isinstance(created, LinodeVolume)
+    return
+
+
+def test_client_level_volume_create_accepts_a_bare_id():
+    """
+        A bare id works too, so callers are not forced to hold an object.
+    """
+    session = FakeSession()
+    session.queue(method="POST", path="/volumes",
+                  response=FakeResponse(payload={"id": 91}))
+    client = _client(session=session)
+
+    client.volume_create(label="data", linode=77)
+
+    assert session.calls[-1]["body"]["linode_id"] == 77
+    return
+
+
+def test_volume_create_omits_attachment_when_absent():
+    """
+        An unattached volume must not send linode_id at all.
+    """
+    session = FakeSession()
+    session.queue(method="POST", path="/volumes",
+                  response=FakeResponse(payload={"id": 92}))
+    client = _client(session=session)
+
+    client.volume_create(label="data", region="us-east", size=10)
+
+    assert "linode_id" not in session.calls[-1]["body"]
+    return
+
+
+def test_client_level_domain_create_sends_the_required_soa():
+    """
+        A master zone requires an SOA contact; the type defaults to master.
+    """
+    session = FakeSession()
+    session.queue(method="POST", path="/domains",
+                  response=FakeResponse(payload={"id": 30,
+                                                 "domain": "ex.com"}))
+    client = _client(session=session)
+
+    domain = client.domain_create(domain="ex.com",
+                                  soa_email="admin@ex.com")
+
+    body = session.calls[-1]["body"]
+    assert body["domain"] == "ex.com"
+    assert body["soa_email"] == "admin@ex.com"
+    assert body["type"] == "master"
+    assert domain.id == 30
+    return
+
+
+def test_created_domain_can_create_records_on_itself():
+    """
+        The venue calls domain.record_create(record_type=...) on the object
+        it just created, so the created domain must be active record and map
+        record_type onto the API's 'type'.
+    """
+    session = FakeSession()
+    session.queue(method="POST", path="/domains",
+                  response=FakeResponse(payload={"id": 31}))
+    session.queue(method="POST", path="/domains/31/records",
+                  response=FakeResponse(payload={"id": 300}))
+    client = _client(session=session)
+
+    domain = client.domain_create(domain="ex.com", soa_email="a@ex.com")
+    record = domain.record_create(record_type="A", name="www",
+                                  target="1.2.3.4", ttl_sec=300)
+
+    call = session.calls[-1]
+    assert call["url"].endswith("/domains/31/records")
+    assert call["body"]["type"] == "A"
+    assert call["body"]["ttl_sec"] == 300
+    assert record.id == 300
+    return
+
+
+def test_listed_domain_is_also_active_record():
+    """
+        A domain found by the reader (via client.domains()) must carry
+        record_create too — apply uses whichever it gets.
+    """
+    session = FakeSession()
+    session.queue_page(path="/domains", entries=[{"id": 32,
+                                                  "domain": "ex.com"}])
+    session.queue(method="POST", path="/domains/32/records",
+                  response=FakeResponse(payload={"id": 301}))
+    client = _client(session=session)
+
+    domain = client.domains()[0]
+    domain.record_create(record_type="CNAME", name="alias",
+                         target="ex.com")
+
+    assert session.calls[-1]["url"].endswith("/domains/32/records")
+    return
