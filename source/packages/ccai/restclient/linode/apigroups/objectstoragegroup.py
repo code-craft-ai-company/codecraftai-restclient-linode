@@ -88,21 +88,32 @@ class ObjectStorageGroup:
         rtnval = [self._wrap(payload=entry) for entry in entries]
         return rtnval
 
-    def bucket_create(self, *, label: str, cluster: Optional[str] = None,
+    def bucket_create(self, *, label: str,
+                      cluster_or_region: Optional[str] = None,
+                      cluster: Optional[str] = None,
                       region: Optional[str] = None, **fields: Any
                       ) -> ObjectStorageBucket:
         """
             Create a bucket.
 
+            Linode addressed buckets by object-storage ``cluster``
+            historically and by ``region`` in the current API.
+            ``cluster_or_region`` is the unified spelling callers use; it is
+            sent as ``region``, which the current API expects.  The explicit
+            ``cluster`` / ``region`` parameters remain for callers that know
+            which they mean.
+
             :param label: The bucket label.
-            :param cluster: The object-storage cluster id.
-            :param region: The region id, for the region-based addressing
-                newer clusters use.
+            :param cluster_or_region: The cluster or region id.
+            :param cluster: The object-storage cluster id (legacy).
+            :param region: The region id.
             :param fields: Remaining bucket fields (acl, cors_enabled...).
 
             :returns: The created bucket.
         """
         body: Dict[str, Any] = {"label": label}
+        if cluster_or_region is not None:
+            body["region"] = cluster_or_region
         if cluster is not None:
             body["cluster"] = cluster
         if region is not None:

@@ -249,6 +249,54 @@ class LinodeVolume(LinodeResource):
         return
 
 
+class LinodeVpc(LinodeResource):
+    """
+        A Linode VPC, which owns its subnets.
+    """
+
+    def subnet_create(self, *, label: str, ipv4: str) -> "LinodeResource":
+        """
+            Create a subnet in this VPC.
+
+            :param label: The subnet label.
+            :param ipv4: The subnet CIDR.
+
+            :returns: The created subnet, bound to this VPC's subnet
+                collection so it can delete itself.
+        """
+        path = "{}/subnets".format(self.resource_path)
+        payload = self._client.request(method="POST", path=path,
+                                       body={"label": label, "ipv4": ipv4})
+        rtnval = make_resource(payload=payload.as_dict(),
+                               client=self._client, collection_path=path)
+        return rtnval
+
+    @property
+    def subnets(self) -> Any:
+        """
+            Return this VPC's subnets as deletable resources.
+
+            The API embeds a ``subnets`` array in the VPC payload.  Returning
+            it raw would hand back inert dicts, and a caller doing
+            ``getattr(subnet, "delete", None)`` would find nothing and
+            silently skip the delete — leaking subnets on teardown.  So each
+            entry is bound to this VPC's subnet collection.  When the payload
+            carries no array the collection is fetched.
+
+            :returns: The subnets, as active-record resources.
+        """
+        path = "{}/subnets".format(self.resource_path)
+
+        embedded = self.get("subnets", None)
+        if embedded is None:
+            embedded = self._client.paginate(path=path)
+
+        rtnval = [make_resource(payload=dict(entry), client=self._client,
+                                collection_path=path)
+                  for entry in embedded]
+        return rtnval
+
+
 class LinodeDomain(LinodeResource):
     """
         A Linode DNS domain.

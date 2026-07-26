@@ -21,7 +21,7 @@ from ccai.restclient.linode.apigroups.collectiongroupbase import (
     CollectionGroupBase
 )
 from ccai.restclient.linode.linoderesource import (
-    LinodeResource, make_resource
+    LinodeResource, LinodeVpc, make_resource
 )
 
 
@@ -31,6 +31,7 @@ class VpcGroup(CollectionGroupBase):
     """
 
     collection_path: str = "/vpcs"
+    resource_class: Optional[type] = LinodeVpc
 
     def __call__(self, *, params: Optional[Dict[str, Any]] = None
                  ) -> List[LinodeResource]:

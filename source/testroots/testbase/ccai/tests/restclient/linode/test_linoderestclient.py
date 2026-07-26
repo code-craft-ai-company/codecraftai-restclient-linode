@@ -17,7 +17,7 @@ import pytest
 
 from ccai.restclient.linode.linodeapierror import LinodeApiRequestError
 from ccai.restclient.linode.linoderesource import (
-    LinodeInstance, LinodeObject, LinodeVolume
+    LinodeInstance, LinodeObject, LinodeVolume, LinodeVpc
 )
 from ccai.restclient.linode.linoderestclient import (
     LinodeRestClient, MAX_PAGE_SIZE
@@ -515,4 +515,108 @@ def test_listed_domain_is_also_active_record():
                          target="ex.com")
 
     assert session.calls[-1]["url"].endswith("/domains/32/records")
+    return
+
+
+def test_vpcs_come_back_as_vpc_resources():
+    """
+        Listed and created VPCs carry the VPC verbs.
+
+        The provisioning venue calls subnet_create on whatever the vpcs group
+        hands back.  A plain LinodeResource has no such method, so binding the
+        VPC resource class is what makes the venue work against the live API —
+        and nothing else in this suite pins it.
+    """
+    session = FakeSession()
+    session.queue_page(path="/vpcs", entries=[{"id": 3, "label": "net"}])
+    session.queue(method="POST", path="/vpcs",
+                  response=FakeResponse(payload={"id": 4, "label": "made"}))
+    client = _client(session=session)
+
+    listed = client.vpcs()
+    created = client.vpcs.create(label="made", region="us-east")
+
+    assert isinstance(listed[0], LinodeVpc) is True
+    assert isinstance(created, LinodeVpc) is True
+    assert callable(created.subnet_create) is True
+    return
+
+
+def test_vpc_subnet_create_posts_under_the_vpc():
+    session = FakeSession()
+    session.queue(method="POST", path="/vpcs/3/subnets",
+                  response=FakeResponse(payload={"id": 11,
+                                                 "label": "sub-a"}))
+    client = _client(session=session)
+    vpc = LinodeVpc({"id": 3, "label": "net"}).bind(
+        client=client, collection_path="/vpcs")
+
+    subnet = vpc.subnet_create(label="sub-a", ipv4="10.0.1.0/24")
+
+    assert session.calls[-1]["body"] == {"label": "sub-a",
+                                         "ipv4": "10.0.1.0/24"}
+    assert subnet.id == 11
+    # The subnet must be able to delete itself, or teardown leaks it.
+    assert subnet.resource_path == "/vpcs/3/subnets/11"
+    return
+
+
+def test_vpc_subnets_bind_the_embedded_array():
+    """
+        Subnets embedded in a VPC payload come back deletable.
+
+        Returning the raw array would hand back inert dicts, and a caller
+        doing getattr(subnet, "delete", None) would find nothing and silently
+        skip the delete — leaking subnets on teardown.
+    """
+    client = _client()
+    vpc = LinodeVpc({"id": 3, "label": "net",
+                     "subnets": [{"id": 11, "label": "sub-a"},
+                                 {"id": 12, "label": "sub-b"}]}).bind(
+        client=client, collection_path="/vpcs")
+
+    subnets = vpc.subnets
+
+    assert [entry.id for entry in subnets] == [11, 12]
+    for entry in subnets:
+        assert callable(entry.delete) is True
+    assert subnets[0].resource_path == "/vpcs/3/subnets/11"
+    return
+
+
+def test_vpc_subnets_are_fetched_when_not_embedded():
+    session = FakeSession()
+    session.queue_page(path="/vpcs/3/subnets",
+                       entries=[{"id": 21, "label": "fetched"}])
+    client = _client(session=session)
+    vpc = LinodeVpc({"id": 3, "label": "net"}).bind(
+        client=client, collection_path="/vpcs")
+
+    subnets = vpc.subnets
+
+    assert [entry.id for entry in subnets] == [21]
+    return
+
+
+def test_bucket_create_sends_cluster_or_region_as_region():
+    """
+        The unified cluster_or_region spelling is sent as region.
+
+        Linode addressed buckets by object-storage cluster historically and by
+        region in the current API; callers pass one value without caring which
+        era it came from.
+    """
+    session = FakeSession()
+    session.queue(method="POST", path="/object-storage/buckets",
+                  response=FakeResponse(payload={"label": "b1",
+                                                 "region": "us-east"}))
+    client = _client(session=session)
+
+    client.object_storage.bucket_create(label="b1",
+                                        cluster_or_region="us-east")
+
+    body = session.calls[-1]["body"]
+    assert body["region"] == "us-east"
+    assert body["label"] == "b1"
+    assert "cluster_or_region" not in body
     return
