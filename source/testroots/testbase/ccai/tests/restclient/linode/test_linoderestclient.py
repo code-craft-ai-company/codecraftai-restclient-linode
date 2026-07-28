@@ -13,7 +13,7 @@ __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 
 
-import pytest
+from ccai import testbase
 
 from ccai.restclient.linode.linodeapierror import LinodeApiRequestError
 from ccai.restclient.linode.linoderesource import (
@@ -303,7 +303,7 @@ def test_error_reason_comes_from_the_errors_array():
                                            "reason": "Label must be unique"}]}))
     client = _client(session=session)
 
-    with pytest.raises(LinodeApiRequestError) as caught:
+    with testbase.raises(LinodeApiRequestError) as caught:
         client.vpcs.create(label="dupe")
 
     error = caught.value
@@ -345,7 +345,7 @@ def test_private_attribute_lookup_does_not_become_a_field():
         attributes.
     """
     obj = LinodeObject({"label": "x"})
-    with pytest.raises(AttributeError):
+    with testbase.raises(AttributeError):
         obj.__deepcopy__
     return
 
