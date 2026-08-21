@@ -23,7 +23,7 @@ from ccai.restclient.linode.linoderestclient import (
     LinodeRestClient, MAX_PAGE_SIZE
 )
 
-from ccai.tests.restclient.linode.fakesession import (
+from .fakesession import (
     FakeResponse, FakeSession
 )
 
