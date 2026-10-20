@@ -1,6 +1,6 @@
 [project]
 name = "codecraftai-restclient-linode"
-version = "1.2.0"
+version = "1.2.1"
 description = "Code Craft AI - Linode REST client"
 readme = "README.rst"
 license = "LicenseRef-CodeCraftAI-Source-Available"
